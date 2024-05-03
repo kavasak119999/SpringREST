@@ -9,13 +9,12 @@ import com.max.rest.exception.NotFoundException;
 import com.max.rest.exception.RegistrationException;
 import com.max.rest.exception.ValidationException;
 import com.max.rest.repository.UserRepository;
-import com.max.rest.utils.DtoToEntity;
-import com.max.rest.utils.EntityToDto;
+import com.max.rest.utils.UserMapper;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.security.crypto.bcrypt.BCrypt;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.validation.ObjectError;
@@ -30,33 +29,39 @@ import java.util.function.Consumer;
 @Transactional
 public class UserServiceImpl implements UserService {
 
+    private final UserMapper userMapper;
+
     private final UserRepository userRepository;
 
+    private final PasswordEncoder passwordEncoder;
+
     @Autowired
-    public UserServiceImpl(UserRepository userRepository) {
+    public UserServiceImpl(UserMapper userMapper, UserRepository userRepository, PasswordEncoder passwordEncoder) {
+        this.userMapper = userMapper;
         this.userRepository = userRepository;
+        this.passwordEncoder = passwordEncoder;
     }
 
     @Override
-    public User updateUser(Long id, UserRequest request) {
+    public User updateUser(Long id, UserRequest userRequest) {
         UserEntity userEntity = userRepository
                 .findById(id).orElseThrow(() -> new NotFoundException(
                         "User with id '" + id + "' not found"));
 
-        String email = request.getEmail();
+        String email = userRequest.getEmail();
         if (email != null && userRepository.existsByEmail(email) && !email.equals(userEntity.getEmail())) {
             throw new ValidationException(Collections.singletonList(new ObjectError("Validation failed",
                     "User with email '" + email + " already registered")));
         }
 
         // Update data for user from DTO
-        BeanUtils.copyProperties(request, userEntity);
+        BeanUtils.copyProperties(userRequest, userEntity);
 
-        userEntity.setPassword(BCrypt.hashpw(request.getPassword(), BCrypt.gensalt()));
+        userEntity.setPassword(passwordEncoder.encode(userRequest.getPassword()));
 
         userEntity = userRepository.save(userEntity);
 
-        return EntityToDto.userEntityToDto(userEntity);
+        return userMapper.userEntityToUser(userEntity);
     }
 
     @Override
@@ -66,15 +71,15 @@ public class UserServiceImpl implements UserService {
             throw new RegistrationException(
                     "User with email '" + email + "' already registered");
 
-        UserEntity userEntity = userRepository.save(DtoToEntity.userDtoToEntity(userRequest));
+        UserEntity userEntity = userRepository.save(userMapper.userRequestToUserEntity(userRequest));
 
-        return EntityToDto.userEntityToDto(userEntity);
+        return userMapper.userEntityToUser(userEntity);
     }
 
     @Override
     public Page<User> getAllUsers(PageRequest pageRequest) {
         Page<UserEntity> entities = userRepository.findAll(pageRequest);
-        return entities.map(EntityToDto::userEntityToDto);
+        return entities.map(userMapper::userEntityToUser);
     }
 
     @Override
@@ -86,35 +91,35 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    public User partialUpdateUser(Long id, UserUpdateRequest request) {
+    public User partialUpdateUser(Long id, UserUpdateRequest userRequest) {
         UserEntity existingUser = userRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException(
                         "User with id '" + id + "' not found"));
 
-        String email = request.getEmail();
+        String email = userRequest.getEmail();
         if (email != null && !email.equals(existingUser.getEmail()) && userRepository.existsByEmail(email)) {
             throw new ValidationException(Collections.singletonList(new ObjectError("Validation failed",
                     "User with email '" + email + " already registered")));
         }
 
-        if (request.getPassword() != null) {
-            updateField(BCrypt.hashpw(request.getPassword(), BCrypt.gensalt()), existingUser::setPassword);
+        if (userRequest.getPassword() != null) {
+            updateField(passwordEncoder.encode(userRequest.getPassword()), existingUser::setPassword);
         }
 
-        updateField(request.getEmail(), existingUser::setEmail);
-        updateField(request.getFirstName(), existingUser::setFirstName);
-        updateField(request.getLastName(), existingUser::setLastName);
-        updateField(request.getBirthDate(), existingUser::setBirthDate);
-        updateField(request.getAddress(), existingUser::setAddress);
-        updateField(request.getPhoneNumber(), existingUser::setPhoneNumber);
+        updateField(userRequest.getEmail(), existingUser::setEmail);
+        updateField(userRequest.getFirstName(), existingUser::setFirstName);
+        updateField(userRequest.getLastName(), existingUser::setLastName);
+        updateField(userRequest.getBirthDate(), existingUser::setBirthDate);
+        updateField(userRequest.getAddress(), existingUser::setAddress);
+        updateField(userRequest.getPhoneNumber(), existingUser::setPhoneNumber);
 
-        return EntityToDto.userEntityToDto(existingUser);
+        return userMapper.userEntityToUser(existingUser);
     }
 
     @Override
     public Page<User> searchUsers(LocalDate fromDate, LocalDate toDate, PageRequest pageRequest) {
         return userRepository.findAllByBirthDateBetween(fromDate, toDate, pageRequest)
-                .map(EntityToDto::userEntityToDto);
+                .map(userMapper::userEntityToUser);
     }
 
     @Override
@@ -124,7 +129,6 @@ public class UserServiceImpl implements UserService {
                         "User with email '" + email + "' not found"));
 
         return UserCredentials.builder()
-                .id(entity.getId())
                 .email(email)
                 .password(entity.getPassword())
                 .build();
@@ -132,11 +136,11 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public User getUserById(Long id) {
-        UserEntity entity = userRepository
+        UserEntity userEntity = userRepository
                 .findById(id).orElseThrow(() -> new NotFoundException(
                         "User with id '" + id + "' not found"));
 
-        return EntityToDto.userEntityToDto(entity);
+        return userMapper.userEntityToUser(userEntity);
     }
 
     @Override

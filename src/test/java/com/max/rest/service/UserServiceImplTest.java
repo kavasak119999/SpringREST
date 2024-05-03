@@ -9,18 +9,20 @@ import com.max.rest.exception.NotFoundException;
 import com.max.rest.exception.RegistrationException;
 import com.max.rest.exception.ValidationException;
 import com.max.rest.repository.UserRepository;
+import com.max.rest.utils.UserMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.security.crypto.bcrypt.BCrypt;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -43,12 +45,18 @@ public class UserServiceImplTest {
     @Captor
     private ArgumentCaptor<UserEntity> userEntityCaptor;
 
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private UserMapper userMapper;
+
     private UserServiceImpl userService;
 
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        userService = new UserServiceImpl(userRepository);
+        userService = new UserServiceImpl(userMapper, userRepository, passwordEncoder);
     }
 
     @Test
@@ -58,7 +66,7 @@ public class UserServiceImplTest {
         UserRequest userRequest = new UserRequest("test@example.com", "password", "John", "Doe",
                 LocalDate.of(1990, 1, 1), "123 Main St", "1234567890");
         UserEntity existingUser = new UserEntity(userId, "test@example.com",
-                BCrypt.hashpw(userRequest.getPassword(), BCrypt.gensalt()), "John", "Doe",
+                passwordEncoder.encode(userRequest.getPassword()), "John", "Doe",
                 LocalDate.of(1990, 1, 1), "123 Main St", "1234567890");
         when(userRepository.findById(userId)).thenReturn(Optional.of(existingUser));
         when(userRepository.existsByEmail(userRequest.getEmail())).thenReturn(false);
@@ -66,7 +74,7 @@ public class UserServiceImplTest {
             UserEntity entity = invocation.getArgument(0);
             entity.setId(userId);
             entity.setEmail(userRequest.getEmail());
-            entity.setPassword(generateHash(userRequest.getPassword()));
+            entity.setPassword(passwordEncoder.encode(userRequest.getPassword()));
             entity.setFirstName(userRequest.getFirstName());
             entity.setLastName(userRequest.getLastName());
             entity.setBirthDate(userRequest.getBirthDate());
@@ -83,7 +91,7 @@ public class UserServiceImplTest {
         verify(userRepository, times(1)).existsByEmail(userRequest.getEmail());
         verify(userRepository, times(1)).save(userEntityCaptor.capture());
         UserEntity capturedUserEntity = userEntityCaptor.getValue();
-        assertTrue(BCrypt.checkpw(userRequest.getPassword(), capturedUserEntity.getPassword()));
+        assertTrue(passwordEncoder.matches(userRequest.getPassword(), capturedUserEntity.getPassword()));
         assertEquals(user.getEmail(), capturedUserEntity.getEmail());
         assertEquals(user.getFirstName(), capturedUserEntity.getFirstName());
         assertEquals(user.getLastName(), capturedUserEntity.getLastName());
@@ -115,7 +123,7 @@ public class UserServiceImplTest {
             UserEntity entity = invocation.getArgument(0);
             entity.setId(userId);
             entity.setEmail(userRequest.getEmail());
-            entity.setPassword(generateHash(userRequest.getPassword()));
+            entity.setPassword(passwordEncoder.encode(userRequest.getPassword()));
             entity.setFirstName(userRequest.getFirstName());
             entity.setLastName(userRequest.getLastName());
             entity.setBirthDate(userRequest.getBirthDate());
@@ -134,7 +142,7 @@ public class UserServiceImplTest {
         assertNotNull(capturedUserEntity.getId());
         assertEquals(user.getId(), capturedUserEntity.getId());
         assertEquals(user.getEmail(), capturedUserEntity.getEmail());
-        assertTrue(BCrypt.checkpw(userRequest.getPassword(), capturedUserEntity.getPassword()));
+        assertTrue(passwordEncoder.matches(userRequest.getPassword(), capturedUserEntity.getPassword()));
         assertEquals(user.getFirstName(), capturedUserEntity.getFirstName());
         assertEquals(user.getLastName(), capturedUserEntity.getLastName());
         assertEquals(user.getBirthDate(), capturedUserEntity.getBirthDate());
@@ -205,8 +213,9 @@ public class UserServiceImplTest {
         Long userId = 1L;
         UserUpdateRequest updateRequest = new UserUpdateRequest("new@example.com", "newPassword",
                 "NewFirst", "NewLast", LocalDate.of(1995, 10, 20), "789 Elm St", "5678901234");
-        UserEntity existingUser = new UserEntity(userId, "old@example.com", "oldPassword",
-                "OldFirst", "OldLast", LocalDate.of(1990, 1, 1), "123 Main St", "1234567890");
+        UserEntity existingUser = new UserEntity(userId, "old@example.com",
+                passwordEncoder.encode(updateRequest.getPassword()), "OldFirst", "OldLast",
+                LocalDate.of(1990, 1, 1), "123 Main St", "1234567890");
         when(userRepository.findById(userId)).thenReturn(Optional.of(existingUser));
         when(userRepository.existsByEmail(updateRequest.getEmail())).thenReturn(false);
 
@@ -261,7 +270,6 @@ public class UserServiceImplTest {
         verify(userRepository, times(1)).findAllByBirthDateBetween(fromDate, toDate, pageRequest);
         assertEquals(2, userPage.getTotalElements());
         List<User> users = userPage.getContent();
-        System.out.println();
         assertEquals(userEntities.get(0).getId(), users.get(0).getId());
         assertEquals(userEntities.get(0).getEmail(), users.get(0).getEmail());
         assertEquals(userEntities.get(1).getId(), users.get(1).getId());
@@ -272,7 +280,7 @@ public class UserServiceImplTest {
     void testGetUserCredentialsByEmail() {
         // Arrange
         String email = "test@example.com";
-        UserEntity userEntity = new UserEntity(1L, email, "hashedPassword", "John", "Doe",
+        UserEntity userEntity = new UserEntity(1L, email, passwordEncoder.encode("hashedPassword"), "John", "Doe",
                 LocalDate.of(1990, 1, 1), "123 Main St", "1234567890");
         when(userRepository.findByEmail(email)).thenReturn(Optional.of(userEntity));
 
@@ -281,7 +289,6 @@ public class UserServiceImplTest {
 
         // Assert
         verify(userRepository, times(1)).findByEmail(email);
-        assertEquals(userEntity.getId(), userCredentials.getId());
         assertEquals(email, userCredentials.getEmail());
         assertEquals(userEntity.getPassword(), userCredentials.getPassword());
     }
@@ -331,15 +338,11 @@ public class UserServiceImplTest {
     @Test
     void testIsValidBirthDate() {
         // Arrange
-        LocalDate validBirthDate = LocalDate.now().minusYears(20);
+        LocalDate validBirthDate = LocalDate.now().minusYears(minAge + 1);
         LocalDate invalidBirthDate = LocalDate.now().minusYears(1);
 
         // Act & Assert
         assertTrue(userService.isValidBirthDate(validBirthDate, minAge));
         assertFalse(userService.isValidBirthDate(invalidBirthDate, minAge));
-    }
-
-    private String generateHash(String password) {
-        return BCrypt.hashpw(password, BCrypt.gensalt());
     }
 }

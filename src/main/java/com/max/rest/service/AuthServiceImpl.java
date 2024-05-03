@@ -6,7 +6,7 @@ import io.jsonwebtoken.Claims;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.security.crypto.bcrypt.BCrypt;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
@@ -17,23 +17,25 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class AuthServiceImpl implements AuthService {
 
+    private final PasswordEncoder passwordEncoder;
+
     private final UserService userService;
     private final Map<String, String> refreshStorage = new HashMap<>();
     private final JwtProviderService jwtProvider;
 
     @Override
-    public JwtLoginResponse login(@NonNull JwtRequest authRequest) {
+    public JwtLoginResponse login(@NonNull UserCredentials authRequest) {
         if (authRequest.getEmail() == null || authRequest.getPassword() == null)
             throw new IllegalArgumentException("Email and password cannot be empty");
 
-        final UserCredentials user = userService.getUserCredentialsByEmail(authRequest.getEmail());
+        final UserCredentials userCredentials = userService.getUserCredentialsByEmail(authRequest.getEmail());
 
-        if (user == null || !BCrypt.checkpw(authRequest.getPassword(), user.getPassword()))
+        if (userCredentials == null || !passwordEncoder.matches(authRequest.getPassword(), userCredentials.getPassword()))
             throw new AuthException("Invalid email or password");
 
-        final String accessToken = jwtProvider.generateAccessToken(user);
-        final String refreshToken = jwtProvider.generateRefreshToken(user);
-        refreshStorage.put(user.getEmail(), refreshToken);
+        final String accessToken = jwtProvider.generateAccessToken(userCredentials);
+        final String refreshToken = jwtProvider.generateRefreshToken(userCredentials);
+        refreshStorage.put(userCredentials.getEmail(), refreshToken);
 
         return new JwtLoginResponse(accessToken, refreshToken);
     }
