@@ -21,7 +21,7 @@ public class AuthController {
     private final JwtProviderService jwtProvider;
 
     @PostMapping("/authenticate")
-    public ResponseEntity<JwtLoginResponse> login(@RequestBody JwtRequest authRequest) {
+    public ResponseEntity<JwtLoginResponse> login(@RequestBody UserCredentials authRequest) {
         log.info("Received authentication request with email: {}", authRequest.getEmail());
 
         final JwtLoginResponse token = authService.login(authRequest);
@@ -32,7 +32,7 @@ public class AuthController {
         return ResponseEntity.ok(token);
     }
 
-    @PostMapping("/refresh-access-token")
+    @PostMapping("/renew-access-token")
     public ResponseEntity<JwtAccessResponse> getNewAccessToken(@RequestBody JwtRefreshRequest request) {
         String requestId = UUID.randomUUID().toString();
         log.info("Received access token refresh request with ID: {}", requestId);
