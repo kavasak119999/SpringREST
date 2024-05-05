@@ -20,14 +20,14 @@ import java.util.Date;
 
 @Slf4j
 @Service
-public class JwtProviderService {
+public class JwtProviderServiceImpl implements JwtProviderService{
 
     private final SecretKey JWT_ACCESS_SECRET;
     private final SecretKey JWT_REFRESH_SECRET;
     private final Integer MINUTES;
     private final Integer DAYS;
 
-    public JwtProviderService(
+    public JwtProviderServiceImpl(
             @Value("${app.jwt.secret.access}") String jwtAccessSecret,
             @Value("${app.jwt.secret.refresh}") String jwtRefreshSecret,
             @Value("${app.jwt.minutes}") Integer minutes,
@@ -39,6 +39,7 @@ public class JwtProviderService {
         this.DAYS = days;
     }
 
+    @Override
     public String generateAccessToken(@NonNull UserCredentials user) {
         final LocalDateTime now = LocalDateTime.now();
         final Instant accessExpirationInstant = now.plusMinutes(MINUTES).atZone(ZoneId.systemDefault()).toInstant();
@@ -50,6 +51,7 @@ public class JwtProviderService {
                 .compact();
     }
 
+    @Override
     public String generateRefreshToken(@NonNull UserCredentials user) {
         final LocalDateTime now = LocalDateTime.now();
         final Instant refreshExpirationInstant = now.plusDays(DAYS).atZone(ZoneId.systemDefault()).toInstant();
@@ -61,10 +63,12 @@ public class JwtProviderService {
                 .compact();
     }
 
+    @Override
     public boolean isValidAccessToken(String accessToken) {
         return isValidToken(accessToken, JWT_ACCESS_SECRET);
     }
 
+    @Override
     public boolean isValidRefreshToken(String refreshToken) {
         return isValidToken(refreshToken, JWT_REFRESH_SECRET);
     }
@@ -91,10 +95,12 @@ public class JwtProviderService {
         return false;
     }
 
+    @Override
     public Claims getAccessClaims(@NonNull String token) {
         return getClaims(token, JWT_ACCESS_SECRET);
     }
 
+    @Override
     public Claims getRefreshClaims(@NonNull String token) {
         return getClaims(token, JWT_REFRESH_SECRET);
     }
@@ -113,6 +119,7 @@ public class JwtProviderService {
         }
     }
 
+    @Override
     public String maskToken(String token) {
         if (token.length() > 8) {
             return token.substring(0, 4) + "..." + token.substring(token.length() - 4);
