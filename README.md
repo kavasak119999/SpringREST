@@ -18,9 +18,11 @@ It allows creating, retrieving, updating, and deleting users, as well as searchi
 - Java 17
 - Spring Boot 2.7.0
 - Spring Data JPA
+- Spring Security
 - MySQL
 - Flyway
 - Swagger OpenAPI
+- Slf4j
 - JWT Authentication
 
 ## Getting Started
